@@ -3,7 +3,7 @@
 # This program was developed with the assistance of ChatGPT and Copilot.
 # Copyright (c) 2024 NAGATA Mizuho. Institute of Laser Engineering, Osaka University.
 # Created on: 2024-05-15
-# Last updated on: 2025-05-16
+# Last updated on: 2026-02-09
 # -------------------------------------------------------------
 
 import tkinter as tk
