@@ -111,7 +111,10 @@ def read_log_file(filename):
                     shutter_open_rates.append(r)
 
         # Calculate average deposition rate (convert Å/s to nm/s)
-        avg_rate_nm = np.mean(shutter_open_rates) * ANGSTROM_TO_NM_CONVERSION if shutter_open_rates else 0
+        if shutter_open_rates:
+            avg_rate_nm = np.mean(shutter_open_rates) * ANGSTROM_TO_NM_CONVERSION
+        else:
+            avg_rate_nm = 0.0
         
         # Calculate shutter open duration
         shutter_open_duration = max(shutter_open_times) - min(shutter_open_times) if shutter_open_times else 0
