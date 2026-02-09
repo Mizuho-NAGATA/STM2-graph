@@ -17,6 +17,19 @@ This Python program is designed to graph the log files of the INFICON STM-2 USB 
 - 各グラフを別々のウィンドウに表示します。
 - 3つのグラフを1つのウィンドウにまとめて比較しやすくします。
 - 平均レートを計算し、グラフのタイトルに表示します。
+- **クロスプラットフォーム対応**: Windows、macOS、Linux で動作します。
+
+## Platform Support / プラットフォーム対応
+
+This program now supports multiple platforms with automatic Japanese font detection:
+- **Windows**: Uses BIZ UD Gothic, MS Gothic, or Yu Gothic fonts
+- **macOS**: Uses Hiragino or Osaka fonts  
+- **Linux**: Uses Takao Gothic or Noto Sans CJK fonts
+
+このプログラムは複数のプラットフォームに対応し、日本語フォントを自動検出します：
+- **Windows**: BIZ UD ゴシック、MSゴシック、游ゴシックフォントを使用
+- **macOS**: ヒラギノまたはOsakaフォントを使用
+- **Linux**: TakaoPゴシックまたはNoto Sans CJKフォントを使用
 
 ## Usage
 
