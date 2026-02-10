@@ -47,6 +47,10 @@ This program now supports multiple platforms with automatic Japanese font detect
 
 ---
 
+## 著者  
+- Copyright (c) 2026 NAGATA Mizuho, 永田 みず穂 - Institute of Laser Engineering, The University of Osaka
+---
+
 ## ライセンス License
 
 - このプロジェクトはMITライセンスの下で公開されています。ライセンスの全文については、[LICENSE](https://github.com/Mizuho-NAGATA/STM2-graph/blob/main/LICENSE) をご覧ください。  
