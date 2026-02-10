@@ -45,7 +45,10 @@ This program now supports multiple platforms with automatic Japanese font detect
 - matplotlib
 - numpy
 
-## License
+---
 
-This program was developed with the assistance of ChatGPT. Copyright (c) 2024 NAGATA Mizuho, 永田 みず穂, Institute of Laser Engineering, Osaka University.
+## ライセンス License
 
+- このプロジェクトはMITライセンスの下で公開されています。ライセンスの全文については、[LICENSE](https://github.com/Mizuho-NAGATA/STM2-graph/blob/main/LICENSE) をご覧ください。  
+- This project is released under the MIT License. For the full text of the license, please see the LICENSE file.
+---
