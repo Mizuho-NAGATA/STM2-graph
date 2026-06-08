@@ -3,7 +3,7 @@
 # This program was developed with the assistance of ChatGPT and Copilot.
 # Copyright (c) 2024 NAGATA Mizuho. Institute of Laser Engineering, Osaka University.
 # Created on: 2024-05-15
-# Last updated on: 2026-02-09
+# Last updated on: 2025-06-09
 # -------------------------------------------------------------
 
 import tkinter as tk
@@ -11,200 +11,156 @@ from tkinter import filedialog, simpledialog, messagebox
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 import numpy as np
-import os
-import sys
 
-# Constants for deposition rate calculations
-# 蒸着レート計算用の定数
-SHUTTER_OPEN_THRESHOLD = 0.1  # Å/s - Threshold to determine if shutter is open
-ANGSTROM_TO_NM_CONVERSION = 0.1  # Conversion factor from Å/s to nm/s
+# 日本語フォントを指定
+font_path = "C:/Windows/Fonts/BIZ-UDGothicR.ttc"
+fp = FontProperties(fname=font_path)
+plt.rcParams["font.family"] = fp.get_name()
 
-# Configure Japanese font for matplotlib (cross-platform support)
-# 日本語フォント設定（クロスプラットフォーム対応）
-def setup_japanese_font():
-    """Setup Japanese font for matplotlib with cross-platform support."""
-    font_paths = []
-    
-    if sys.platform == 'win32':
-        # Windows fonts
-        font_paths = [
-            "C:/Windows/Fonts/BIZ-UDGothicR.ttc",
-            "C:/Windows/Fonts/msgothic.ttc",
-            "C:/Windows/Fonts/YuGothR.ttc"
-        ]
-    elif sys.platform == 'darwin':
-        # macOS fonts
-        font_paths = [
-            "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-            "/Library/Fonts/Osaka.ttf"
-        ]
-    else:
-        # Linux fonts
-        font_paths = [
-            "/usr/share/fonts/truetype/takao-gothic/TakaoPGothic.ttf",
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-        ]
-    
-    # Try each font path
-    for font_path in font_paths:
-        if os.path.exists(font_path):
-            try:
-                fp = FontProperties(fname=font_path)
-                plt.rcParams['font.family'] = fp.get_name()
-                return
-            except Exception:
-                continue
-    
-    # Fallback: Use system default font
-    # If no Japanese font found, matplotlib will use default font
-    pass
-
-# Setup font at module load time
-setup_japanese_font()
 
 def read_log_file(filename):
-    """
-    Read INFICON STM-2 log file and parse deposition data.
-    
-    Args:
-        filename: Path to the log file
-        
-    Returns:
-        tuple: (time, rate, thick, frequency, avg_rate_nm, open_duration)
-               Returns (None, None, None, None, None, None) on error
-    """
     try:
         time, rate, thick, frequency = [], [], [], []
         shutter_open_times = []
         shutter_open_rates = []
 
-        with open(filename, 'r', encoding='utf-8') as file:
+        current_time_offset = 0.0  # 複数のログを連続させるための時間オフセット
+        last_time_in_run = 0.0  # 現在のランの直前のタイムスタンプ保持用
+
+        with open(filename, "r", encoding="utf-8") as file:
             lines = file.readlines()
             for i, line in enumerate(lines):
-                if line.startswith('Time'):
-                    continue  # Skip header line
-                if line.startswith('Stop Log'):
-                    break  # Stop reading at end of data
-
-                data = line.split(',')
-                if len(data) < 4:
-                    continue  # Skip invalid lines
-
-                try:
-                    t = float(data[0].strip())
-                    r = float(data[1].strip())
-                    th = float(data[2].strip())
-                    f = float(data[3].strip())
-                except (ValueError, IndexError) as e:
-                    # Skip lines with invalid numeric data
+                # 新しいログセッションの開始を検知
+                if line.startswith("Start Log"):
+                    if time:  # 既にデータがある＝2つ目以降のログ
+                        current_time_offset += last_time_in_run
                     continue
 
-                time.append(t)
-                rate.append(r)
-                thick.append(th)
-                frequency.append(f)
+                # ヘッダー行や空行、Stop Log行はスキップして処理を継続する
+                if (
+                    line.startswith("Time")
+                    or line.startswith("Stop Log")
+                    or not line.strip()
+                ):
+                    continue
 
-                # Determine if shutter is open based on deposition rate threshold
-                # 蒸着レートが閾値以上の場合、シャッターが開いていると判断
-                if r > SHUTTER_OPEN_THRESHOLD:
-                    shutter_open_times.append(t)
-                    shutter_open_rates.append(r)
+                data = line.split(",")
+                if len(data) >= 4:
+                    try:
+                        raw_time = float(data[0].strip())
+                        last_time_in_run = raw_time  # 現在のラン内での最新時間を記録
 
-        # Calculate average deposition rate (convert Å/s to nm/s)
+                        # 累積オフセットを足して時間を連続させる
+                        actual_time = raw_time + current_time_offset
+
+                        r = float(data[1].strip())
+                        t = float(data[2].strip())
+                        f = float(data[3].strip())
+
+                        time.append(actual_time)
+                        rate.append(r)
+                        thick.append(t)
+                        frequency.append(f)
+
+                        # 【維持】蒸着レートが有意の値（例: 0.2 Å/s 以上）の場合、シャッターが開いていると判断
+                        if r > 0.2:
+                            shutter_open_times.append(
+                                actual_time
+                            )  # 補正後の連続した時間を入れる
+                            shutter_open_rates.append(r)
+
+                    except ValueError:
+                        continue  # 数値変換できない行はスキップ
+
+        if not time:
+            messagebox.showerror("Error", "No valid data found in the log file.")
+            return [], [], [], [], 0, 0
+
+        # 【維持】平均レートとシャッター開放時間の計算ロジック
         if shutter_open_rates:
-            avg_rate_nm = np.mean(shutter_open_rates) * ANGSTROM_TO_NM_CONVERSION
+            # 平均レートを Å/s から nm/s に変換
+            avg_rate_nm = np.mean(shutter_open_rates) / 10
+            # シャッターが開いていた期間（最後の時間 - 最初の時間）
+            open_duration = shutter_open_times[-1] - shutter_open_times[0]
         else:
-            avg_rate_nm = 0.0
-        
-        # Calculate shutter open duration
-        shutter_open_duration = max(shutter_open_times) - min(shutter_open_times) if shutter_open_times else 0
+            avg_rate_nm = 0
+            open_duration = 0
 
-        return time, rate, thick, frequency, avg_rate_nm, shutter_open_duration
-        
-    except FileNotFoundError:
-        messagebox.showerror("Error", f"File not found: {filename}")
-        return None, None, None, None, None, None
-    except PermissionError:
-        messagebox.showerror("Error", f"Permission denied: {filename}")
-        return None, None, None, None, None, None
+        return time, rate, thick, frequency, avg_rate_nm, open_duration
+
     except Exception as e:
         messagebox.showerror("Error", f"Error reading log file: {e}")
-        return None, None, None, None, None, None
+        return [], [], [], [], 0, 0
 
-def plot_graph(x, y, title, x_label, y_label, color, avg_rate_nm, open_duration):
-    """
-    Plot a single graph with average rate and duration in the title.
-    
-    Args:
-        x: Time data
-        y: Y-axis data (rate, thickness, or frequency)
-        title: Base title for the graph
-        x_label: Label for x-axis
-        y_label: Label for y-axis
-        color: Line color
-        avg_rate_nm: Pre-calculated average deposition rate in nm/s
-        open_duration: Pre-calculated shutter open duration in seconds
-    """
+
+def plot_graph(x, y, title, x_label, y_label, color):
     try:
-        # Add average rate and duration to title
+        # 蒸着レートが有意の値（例: 0.2 Å/s 以上）の場合、シャッターが開いていると判断
+        shutter_open_times = [x[i] for i in range(len(y)) if y[i] > 0.2]
+        shutter_open_rates = [y[i] for i in range(len(y)) if y[i] > 0.2]
+
+        avg_rate_nm = (
+            np.mean(shutter_open_rates) * 0.1 if shutter_open_rates else 0
+        )  # nm/s に変換
+        open_duration = (
+            (max(shutter_open_times) - min(shutter_open_times))
+            if shutter_open_times
+            else 0
+        )
+
         # グラフタイトルに平均蒸着レート(nm/s)とシャッター開時間(秒)を追加
-        full_title = f'{title} (Avg Rate: {avg_rate_nm:.2f} nm/s, Open Duration: {open_duration:.1f} sec)'
+        title = f"{title} (Avg Rate: {avg_rate_nm:.2f} nm/s, Open Duration: {open_duration:.1f} sec)"
 
         plt.figure(figsize=(8, 6))
         plt.plot(x, y, color=color)
-        plt.title(full_title)
+        plt.title(title)
         plt.xlabel(x_label)
         plt.ylabel(y_label)
         plt.show()
     except Exception as e:
         messagebox.showerror("Error", f"Error plotting graph: {e}")
 
-def plot_all_graphs_in_one_window(time, rate, thick, frequency, title, avg_rate_nm, open_duration):
-    """
-    Plot all three graphs (rate, thickness, frequency) in a single window.
-    
-    Args:
-        time: Time data
-        rate: Rate data
-        thick: Thickness data
-        frequency: Frequency data
-        title: Base title for the graphs
-        avg_rate_nm: Average deposition rate in nm/s
-        open_duration: Shutter open duration in seconds
-    """
+
+def plot_all_graphs_in_one_window(
+    time, rate, thick, frequency, title, avg_rate_nm, open_duration
+):
     try:
         fig, axs = plt.subplots(3, 1, figsize=(10, 12))
         graph_title = f"{title} (Avg Rate: {avg_rate_nm:.2f} nm/s, Shutter Open: {open_duration:.1f} sec)"
         fig.suptitle(graph_title, fontsize=16)
 
-        axs[0].plot(time, rate, color='blue')
-        axs[0].set_title('Rate vs Time')
-        axs[0].set_xlabel('Time [sec]')
-        axs[0].set_ylabel('Rate [Å/S]')
+        axs[0].plot(time, rate, color="blue")
+        axs[0].set_title("Rate vs Time")
+        axs[0].set_xlabel("Time [sec]")
+        axs[0].set_ylabel("Rate [Å/S]")
 
-        axs[1].plot(time, thick, color='green')
-        axs[1].set_title('Thickness vs Time')
-        axs[1].set_xlabel('Time [sec]')
-        axs[1].set_ylabel('Thickness [Å]')
+        axs[1].plot(time, thick, color="green")
+        axs[1].set_title("Thickness vs Time")
+        axs[1].set_xlabel("Time [sec]")
+        axs[1].set_ylabel("Thickness [Å]")
 
-        axs[2].plot(time, frequency, color='red')
-        axs[2].set_title('Frequency vs Time')
-        axs[2].set_xlabel('Time [sec]')
-        axs[2].set_ylabel('Frequency [Hz]')
+        axs[2].plot(time, frequency, color="red")
+        axs[2].set_title("Frequency vs Time")
+        axs[2].set_xlabel("Time [sec]")
+        axs[2].set_ylabel("Frequency [Hz]")
 
         plt.tight_layout(rect=[0, 0, 1, 0.96])
         plt.show()
     except Exception as e:
         messagebox.showerror("Error", f"Error plotting all graphs: {e}")
 
+
 def select_file_and_plot():
-    """Main function to select log file and display graphs."""
     root = tk.Tk()
     root.withdraw()
 
-    file_path = filedialog.askopenfilename(title="Select log file", filetypes=[('Log Files', '*.log')])
+    file_path = filedialog.askopenfilename(
+        title="Select log file", filetypes=[("Log Files", "*.log")]
+    )
     if file_path:
-        time, rate, thick, frequency, avg_rate_nm, open_duration = read_log_file(file_path)
+        time, rate, thick, frequency, avg_rate_nm, open_duration = read_log_file(
+            file_path
+        )
 
         if not time:  # Check if read_log_file encountered an error
             return
@@ -213,15 +169,36 @@ def select_file_and_plot():
 
         if graph_title:
             # Display each graph in a separate window
-            plot_graph(time, rate, graph_title + ' (Rate vs Time)', 'Time [sec]', 'Rate [Å/S]', 
-                      color='blue', avg_rate_nm=avg_rate_nm, open_duration=open_duration)
-            plot_graph(time, thick, graph_title + ' (Thickness vs Time)', 'Time [sec]', 'Thickness [Å]', 
-                      color='green', avg_rate_nm=avg_rate_nm, open_duration=open_duration)
-            plot_graph(time, frequency, graph_title + ' (Frequency vs Time)', 'Time [sec]', 'Frequency [Hz]', 
-                      color='red', avg_rate_nm=avg_rate_nm, open_duration=open_duration)
+            plot_graph(
+                time,
+                rate,
+                graph_title + " (Rate vs Time)",
+                "Time [sec]",
+                "Rate [Å/S]",
+                color="blue",
+            )
+            plot_graph(
+                time,
+                thick,
+                graph_title + " (Thickness vs Time)",
+                "Time [sec]",
+                "Thickness [Å]",
+                color="green",
+            )
+            plot_graph(
+                time,
+                frequency,
+                graph_title + " (Frequency vs Time)",
+                "Time [sec]",
+                "Frequency [Hz]",
+                color="red",
+            )
 
             # Three graphs in one window
-            plot_all_graphs_in_one_window(time, rate, thick, frequency, graph_title, avg_rate_nm, open_duration)
+            plot_all_graphs_in_one_window(
+                time, rate, thick, frequency, graph_title, avg_rate_nm, open_duration
+            )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     select_file_and_plot()
