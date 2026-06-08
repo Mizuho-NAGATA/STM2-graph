@@ -21,22 +21,20 @@ plt.rcParams["font.family"] = fp.get_name()
 def read_log_file(filename):
     try:
         time, rate, thick, frequency = [], [], [], []
-        shutter_open_times = []
-        shutter_open_rates = []
+        shutter_open_times = []  # シャッター開閉のタイミングを記録（r > 0.2 で判定）
+        shutter_open_rates = []  # 平均レート計算用のデータを蓄積（r >= 0.1 で判定）
 
-        current_time_offset = 0.0  # 複数のログを連続させるための時間オフセット
-        last_time_in_run = 0.0  # 現在のランの直前のタイムスタンプ保持用
+        current_time_offset = 0.0
+        last_time_in_run = 0.0
 
         with open(filename, "r", encoding="utf-8") as file:
             lines = file.readlines()
             for i, line in enumerate(lines):
-                # 新しいログセッションの開始を検知
                 if line.startswith("Start Log"):
-                    if time:  # 既にデータがある＝2つ目以降のログ
+                    if time:
                         current_time_offset += last_time_in_run
                     continue
 
-                # ヘッダー行や空行、Stop Log行はスキップして処理を継続する
                 if (
                     line.startswith("Time")
                     or line.startswith("Stop Log")
@@ -48,11 +46,9 @@ def read_log_file(filename):
                 if len(data) >= 4:
                     try:
                         raw_time = float(data[0].strip())
-                        last_time_in_run = raw_time  # 現在のラン内での最新時間を記録
+                        last_time_in_run = raw_time
 
-                        # 累積オフセットを足して時間を連続させる
                         actual_time = raw_time + current_time_offset
-
                         r = float(data[1].strip())
                         t = float(data[2].strip())
                         f = float(data[3].strip())
@@ -62,28 +58,34 @@ def read_log_file(filename):
                         thick.append(t)
                         frequency.append(f)
 
-                        # 【維持】蒸着レートが有意の値（例: 0.2 Å/s 以上）の場合、シャッターが開いていると判断
+                        # ─── 二つの条件の両立処理 ───
+
+                        # 条件1: 0.2 Å/s 超でおおよそのシャッター開放「時刻」を切り出す
                         if r > 0.2:
-                            shutter_open_times.append(
-                                actual_time
-                            )  # 補正後の連続した時間を入れる
+                            shutter_open_times.append(actual_time)
+
+                        # 条件2: 平均レートの計算には、膜厚に寄与する 0.1 Å/s 以上のデータをすべて抽出する
+                        if r >= 0.1:
                             shutter_open_rates.append(r)
 
                     except ValueError:
-                        continue  # 数値変換できない行はスキップ
+                        continue
 
         if not time:
             messagebox.showerror("Error", "No valid data found in the log file.")
             return [], [], [], [], 0, 0
 
-        # 【維持】平均レートとシャッター開放時間の計算ロジック
+        # 平均レートとシャッター開放時間の計算
+        # 0.1 Å/s 以上のデータが存在すれば平均を算出
         if shutter_open_rates:
-            # 平均レートを Å/s から nm/s に変換
             avg_rate_nm = np.mean(shutter_open_rates) / 10
-            # シャッターが開いていた期間（最後の時間 - 最初の時間）
-            open_duration = shutter_open_times[-1] - shutter_open_times[0]
         else:
             avg_rate_nm = 0
+
+        # 0.2 Å/s 超で検知したシャッターの最初と最後の差から開放時間を算出
+        if shutter_open_times:
+            open_duration = shutter_open_times[-1] - shutter_open_times[0]
+        else:
             open_duration = 0
 
         return time, rate, thick, frequency, avg_rate_nm, open_duration
